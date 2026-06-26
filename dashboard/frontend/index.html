@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>North York Voice Agents</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: "#0f1117",
+            card:    "#1a1d27",
+            border:  "#2a2d3a",
+            accent:  "#6366f1",
+            green:   "#22c55e",
+            amber:   "#f59e0b",
+            red:     "#ef4444",
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="bg-surface text-slate-200 min-h-screen font-sans">
+
+  <!-- Header -->
+  <header class="border-b border-border px-8 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-2 h-2 rounded-full bg-green animate-pulse" id="status-dot"></div>
+      <span class="font-semibold text-white tracking-tight">North York Voice Agents</span>
+    </div>
+    <div class="flex items-center gap-6 text-sm text-slate-400">
+      <span id="active-count" class="text-white font-medium">— active calls</span>
+      <span id="last-refresh" class="text-xs"></span>
+    </div>
+  </header>
+
+  <main class="px-8 py-6 max-w-7xl mx-auto space-y-8">
+
+    <!-- Stats row -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-card border border-border rounded-xl p-5">
+        <p class="text-xs text-slate-400 uppercase tracking-widest mb-1">Calls Today</p>
+        <p class="text-3xl font-bold text-white" id="stat-calls">—</p>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-5">
+        <p class="text-xs text-slate-400 uppercase tracking-widest mb-1">Avg Duration</p>
+        <p class="text-3xl font-bold text-white" id="stat-avg">—</p>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-5">
+        <p class="text-xs text-slate-400 uppercase tracking-widest mb-1">Leads Captured</p>
+        <p class="text-3xl font-bold text-white" id="stat-leads">—</p>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-5">
+        <p class="text-xs text-slate-400 uppercase tracking-widest mb-1">Urgent Matters</p>
+        <p class="text-3xl font-bold text-white" id="stat-urgent">—</p>
+      </div>
+    </section>
+
+    <!-- Active calls -->
+    <section>
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-3">Live Calls</h2>
+      <div id="active-calls" class="space-y-2">
+        <div class="bg-card border border-border rounded-xl px-5 py-4 text-slate-500 text-sm" id="no-active">
+          No active calls right now
+        </div>
+      </div>
+    </section>
+
+    <!-- Recent leads -->
+    <section>
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-3">Recent Leads</h2>
+      <div class="bg-card border border-border rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border text-xs text-slate-400 uppercase tracking-widest">
+              <th class="text-left px-5 py-3">Name</th>
+              <th class="text-left px-5 py-3">Phone</th>
+              <th class="text-left px-5 py-3">Matter</th>
+              <th class="text-left px-5 py-3">Preferred Time</th>
+              <th class="text-left px-5 py-3">Agent</th>
+              <th class="text-left px-5 py-3">Urgent</th>
+              <th class="text-left px-5 py-3">Captured</th>
+            </tr>
+          </thead>
+          <tbody id="leads-body">
+            <tr><td colspan="7" class="px-5 py-6 text-slate-500 text-center">No leads yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Call log -->
+    <section>
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-3">Call Log</h2>
+      <div class="bg-card border border-border rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border text-xs text-slate-400 uppercase tracking-widest">
+              <th class="text-left px-5 py-3">Caller</th>
+              <th class="text-left px-5 py-3">Agent</th>
+              <th class="text-left px-5 py-3">Started</th>
+              <th class="text-left px-5 py-3">Duration</th>
+              <th class="text-left px-5 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody id="calls-body">
+            <tr><td colspan="5" class="px-5 py-6 text-slate-500 text-center">No calls yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
