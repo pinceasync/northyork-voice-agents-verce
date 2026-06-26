@@ -9,6 +9,7 @@ from livekit.agents import JobContext, JobProcess
 
 import config
 from agent import LawFirmAgent, build_session
+from dashboard.backend import app  # Vercel entrypoint
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL, logging.INFO),
