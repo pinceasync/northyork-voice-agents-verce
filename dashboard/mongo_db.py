@@ -69,5 +69,42 @@ def list_leads(limit: int = 50) -> list[dict]:
         d["_id"] = str(d["_id"])
     return docs
 
+def log_usage(service: str, units: int, cost_usd: float, metadata: dict = None) -> None:
+    _db().usage_log.insert_one({
+        "service": service,
+        "units": units,
+        "cost_usd": cost_usd,
+        "metadata": metadata or {},
+        "created_at": _now(),
+    })
+
+def get_openai_usage() -> dict:
+    result = list(_db().usage_log.aggregate([
+        {"$match": {"service": "openai"}},
+        {"$group": {
+            "_id": None,
+            "total_cost": {"$sum": "$cost_usd"},
+            "calls": {"$sum": 1},
+            "tokens_in": {"$sum": "$metadata.tokens_in"},
+            "tokens_out": {"$sum": "$metadata.tokens_out"},
+        }}
+    ]))
+    return result[0] if result else {"total_cost": 0.0, "calls": 0, "tokens_in": 0, "tokens_out": 0}
+
+def get_cartesia_usage() -> dict:
+    result = list(_db().usage_log.aggregate([
+        {"$match": {"service": "cartesia"}},
+        {"$group": {
+            "_id": None,
+            "total_cost": {"$sum": "$cost_usd"},
+            "calls": {"$sum": 1},
+            "total_chars": {"$sum": "$units"},
+        }}
+    ]))
+    return result[0] if result else {"total_cost": 0.0, "calls": 0, "total_chars": 0}
+
+def count_messages() -> int:
+    return _db().messages.count_documents({})
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
