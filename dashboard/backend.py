@@ -21,7 +21,6 @@ app = FastAPI(title="North York Voice Agents — Dashboard")
 
 FRONTEND = Path(__file__).parent / "frontend"
 
-# Cartesia voice IDs
 AGENTS = {
     "hvac": {
         "prompt": HVAC_PROMPT,
@@ -31,11 +30,9 @@ AGENTS = {
     "law_firm": {
         "prompt": LAW_PROMPT,
         "begin": LAW_BEGIN,
-        "voice_id": "dc30854e-e398-4579-9dc8-16f6cb2c19b9",  # Victoria — British professional female
+        "voice_id": "71a7ad14-091c-4e8e-a314-022ece01c121",  # Charlotte — elegant young female
     },
 }
-
-# ── Chat API ──────────────────────────────────────────────────────────────────
 
 class StartRequest(BaseModel):
     agent: str = "hvac"
@@ -141,8 +138,6 @@ async def stats():
         "calls_today": sum(1 for c in convs if c["started_at"].startswith(today)),
         "consultations_booked": sum(1 for l in leads if l["created_at"].startswith(today)),
     }
-
-# ── Serve frontend ────────────────────────────────────────────────────────────
 
 app.mount("/static", StaticFiles(directory=FRONTEND / "static"), name="static")
 
