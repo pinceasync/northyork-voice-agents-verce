@@ -6,6 +6,7 @@ let currentAgent = "hvac";
 let _audioCtx = null;
 let _ambienceGain = null;
 let _ambienceNode = null;
+let _humOsc = null;
 let _keyboardTimer = null;
 
 function audioCtx() {
@@ -14,30 +15,24 @@ function audioCtx() {
   return _audioCtx;
 }
 
-// Single synthesised key click (bandpass-filtered noise burst)
 function _keyClick(ctx, when, volume) {
   const len = Math.floor(ctx.sampleRate * 0.035);
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
   const d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, 5);
-
   const src = ctx.createBufferSource();
   src.buffer = buf;
-
   const bpf = ctx.createBiquadFilter();
   bpf.type = "bandpass";
   bpf.frequency.value = 1800 + Math.random() * 1000;
   bpf.Q.value = 1.2;
-
   const g = ctx.createGain();
   g.gain.setValueAtTime(volume, when);
   g.gain.exponentialRampToValueAtTime(0.0001, when + 0.035);
-
   src.connect(bpf); bpf.connect(g); g.connect(ctx.destination);
   src.start(when);
 }
 
-// Schedule a random typing burst (3–10 keystrokes, 70–180 ms apart)
 function _scheduleKeyBurst() {
   const ctx = audioCtx();
   const keyCount = 3 + Math.floor(Math.random() * 8);
@@ -48,16 +43,13 @@ function _scheduleKeyBurst() {
   }
 }
 
-// Recurring keyboard ambient scheduler: burst every 3–9 seconds
 function _startKeyboardAmbience() {
   if (_keyboardTimer) return;
   function schedule() {
     _scheduleKeyBurst();
-    const next = (3 + Math.random() * 6) * 1000;
-    _keyboardTimer = setTimeout(schedule, next);
+    _keyboardTimer = setTimeout(schedule, (3 + Math.random() * 6) * 1000);
   }
-  // First burst after 1–3 s
-  _keyboardTimer = setTimeout(schedule, 1000 + Math.random() * 2000);
+  _keyboardTimer = setTimeout(schedule, 800 + Math.random() * 1500);
 }
 
 function _stopKeyboardAmbience() {
@@ -65,12 +57,11 @@ function _stopKeyboardAmbience() {
   _keyboardTimer = null;
 }
 
-// Office background: pink noise + subtle low rumble (AC / building hum)
-function startAmbience() {
+// Start ambient sounds — called when TTS audio begins playing
+function _startAmbience() {
   if (_ambienceNode) return;
   const ctx = audioCtx();
 
-  // Pink noise via ScriptProcessor
   let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
   _ambienceNode = ctx.createScriptProcessor(4096, 1, 1);
   _ambienceNode.onaudioprocess = (e) => {
@@ -85,41 +76,44 @@ function startAmbience() {
     }
   };
 
-  // Low-pass the pink noise so it sits back in the mix (muffled room tone)
   const lpf = ctx.createBiquadFilter();
   lpf.type = "lowpass";
   lpf.frequency.value = 1200;
 
-  // Subtle AC hum at ~60 Hz
-  const hum = ctx.createOscillator();
-  hum.type = "sine";
-  hum.frequency.value = 60;
+  _humOsc = ctx.createOscillator();
+  _humOsc.type = "sine";
+  _humOsc.frequency.value = 60;
   const humGain = ctx.createGain();
   humGain.gain.value = 0.006;
-  hum.connect(humGain);
+  _humOsc.connect(humGain);
 
   _ambienceGain = ctx.createGain();
   _ambienceGain.gain.setValueAtTime(0, ctx.currentTime);
-  _ambienceGain.gain.linearRampToValueAtTime(0.038, ctx.currentTime + 2.5);
+  _ambienceGain.gain.linearRampToValueAtTime(0.038, ctx.currentTime + 0.3);
 
   _ambienceNode.connect(lpf);
   lpf.connect(_ambienceGain);
   humGain.connect(_ambienceGain);
   _ambienceGain.connect(ctx.destination);
-  hum.start();
+  _humOsc.start();
 
   _startKeyboardAmbience();
 }
 
-function stopAmbience() {
+// Stop ambient sounds — called when TTS audio ends
+function _stopAmbience() {
   _stopKeyboardAmbience();
   if (!_ambienceNode || !_ambienceGain) return;
   const ctx = audioCtx();
-  _ambienceGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.5);
+  _ambienceGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
   setTimeout(() => {
-    try { _ambienceNode.disconnect(); _ambienceGain.disconnect(); } catch(_) {}
-    _ambienceNode = null; _ambienceGain = null;
-  }, 1700);
+    try {
+      _ambienceNode.disconnect();
+      _ambienceGain.disconnect();
+      if (_humOsc) { _humOsc.stop(); _humOsc.disconnect(); }
+    } catch(_) {}
+    _ambienceNode = null; _ambienceGain = null; _humOsc = null;
+  }, 500);
 }
 
 // ── Tab / overview ─────────────────────────────────────────────────────────────
@@ -187,7 +181,7 @@ async function startChat() {
   const box = document.getElementById("chat-messages");
   box.innerHTML = "";
   appendMessage("assistant", res.message);
-  if (ttsEnabled) { playTTS(res.message); startAmbience(); }
+  if (ttsEnabled) playTTS(res.message);
   document.getElementById("chat-input").disabled = false;
   document.getElementById("send-btn").disabled = false;
   document.getElementById("chat-input").focus();
@@ -214,10 +208,10 @@ async function sendMessage() {
     document.getElementById("chat-input").disabled = true;
     document.getElementById("send-btn").disabled = true;
     appendMessage("system", "— Conversation ended —");
-    stopAmbience();
   }
 }
 
+// Play TTS — ambient sounds start when audio plays, stop when it ends
 async function playTTS(text) {
   try {
     const res = await fetch("/api/tts", {
@@ -229,8 +223,9 @@ async function playTTS(text) {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
+    audio.onplay = () => _startAmbience();
+    audio.onended = () => { URL.revokeObjectURL(url); _stopAmbience(); };
     audio.play();
-    audio.onended = () => URL.revokeObjectURL(url);
   } catch (e) { console.error("TTS error:", e); }
 }
 
@@ -241,13 +236,12 @@ function toggleTTS() {
   btn.classList.toggle("bg-indigo-600", ttsEnabled);
   btn.classList.toggle("border-indigo-600", ttsEnabled);
   btn.classList.toggle("text-white", ttsEnabled);
-  if (ttsEnabled && conversationId) startAmbience();
-  else stopAmbience();
+  if (!ttsEnabled) _stopAmbience();
 }
 
 function resetChat() {
   conversationId = null;
-  stopAmbience();
+  _stopAmbience();
   document.getElementById("chat-messages").innerHTML = '<p class="text-slate-500 text-sm text-center">Select an agent and start a conversation</p>';
   document.getElementById("chat-input").disabled = true;
   document.getElementById("send-btn").disabled = true;
