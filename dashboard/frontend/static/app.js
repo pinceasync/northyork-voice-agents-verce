@@ -60,7 +60,6 @@ function _stopKeyboardAmbience() {
 function _startAmbience() {
   if (_ambienceNode) return;
   const ctx = audioCtx();
-
   let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
   _ambienceNode = ctx.createScriptProcessor(4096, 1, 1);
   _ambienceNode.onaudioprocess = (e) => {
@@ -74,28 +73,23 @@ function _startAmbience() {
       b6=w*0.115926;
     }
   };
-
   const lpf = ctx.createBiquadFilter();
   lpf.type = "lowpass";
   lpf.frequency.value = 1200;
-
   _humOsc = ctx.createOscillator();
   _humOsc.type = "sine";
   _humOsc.frequency.value = 60;
   const humGain = ctx.createGain();
   humGain.gain.value = 0.006;
   _humOsc.connect(humGain);
-
   _ambienceGain = ctx.createGain();
   _ambienceGain.gain.setValueAtTime(0, ctx.currentTime);
   _ambienceGain.gain.linearRampToValueAtTime(0.038, ctx.currentTime + 0.3);
-
   _ambienceNode.connect(lpf);
   lpf.connect(_ambienceGain);
   humGain.connect(_ambienceGain);
   _ambienceGain.connect(ctx.destination);
   _humOsc.start();
-
   _startKeyboardAmbience();
 }
 
@@ -163,23 +157,66 @@ function fmtNum(n) {
   return n.toString();
 }
 
-function fmtUsd(n) {
-  if (!n) return "$0.000000";
-  if (n < 0.01) return "$" + n.toFixed(6);
-  return "$" + n.toFixed(4);
+function fmtUsd(n, decimals) {
+  if (!n) return "$0.00";
+  const d = decimals !== undefined ? decimals : (n < 0.01 ? 6 : 4);
+  return "$" + Number(n).toFixed(d);
+}
+
+const SERVICE_COLOURS = {
+  "Twilio":   { bar: "bg-blue-500",    text: "text-blue-400"    },
+  "Deepgram": { bar: "bg-violet-500",  text: "text-violet-400"  },
+  "Cartesia": { bar: "bg-rose-500",    text: "text-rose-400"    },
+  "OpenAI":   { bar: "bg-emerald-500", text: "text-emerald-400" },
+  "LiveKit":  { bar: "bg-amber-500",   text: "text-amber-400"   },
+};
+
+function svcColor(name, type) {
+  return (SERVICE_COLOURS[name] || { bar: "bg-slate-500", text: "text-slate-400" })[type];
 }
 
 async function loadDevDashboard() {
   const data = await fetch("/api/dev/stats").then(r => r.json());
+  const pm = data.per_minute;
 
-  // Costs
+  // Per-minute hero
+  document.getElementById("dev-cost-per-min").textContent = fmtUsd(pm.total, 4) + "/min";
+  document.getElementById("dev-cost-per-call").textContent = fmtUsd(pm.cost_per_call, 4);
+  document.getElementById("dev-avg-label").textContent = "avg " + pm.avg_call_min + " min";
+
+  // Breakdown rows
+  document.getElementById("dev-permin-rows").innerHTML = pm.components.map(c => {
+    const pct = Math.round((c.cost / pm.total) * 100);
+    return `
+      <div class="flex items-center gap-4">
+        <div class="w-28 flex-shrink-0 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full ${svcColor(c.service, "bar")} flex-shrink-0"></span>
+          <span class="text-sm text-white font-medium">${c.service}</span>
+        </div>
+        <div class="w-36 flex-shrink-0 text-xs text-slate-500">${c.detail}</div>
+        <div class="flex-1 bg-surface rounded-full h-1.5 overflow-hidden">
+          <div class="${svcColor(c.service, "bar")} h-full rounded-full" style="width:${pct}%"></div>
+        </div>
+        <div class="w-10 text-right text-xs text-slate-500">${pct}%</div>
+        <div class="w-20 text-right text-sm font-mono ${svcColor(c.service, "text")}">$${c.cost.toFixed(4)}</div>
+      </div>`;
+  }).join("");
+
+  // Monthly projections
+  document.getElementById("dev-projections").innerHTML = pm.projections.map(p => `
+    <div class="bg-surface border border-border rounded-lg p-4">
+      <p class="text-xs text-slate-400 mb-2">${p.label}</p>
+      <p class="text-xl font-bold text-white mb-1">$${p.total.toFixed(0)}<span class="text-sm font-normal text-slate-400">/mo</span></p>
+      <p class="text-xs text-slate-500">${p.minutes.toLocaleString()} min · +$${p.hosting_cost} hosting</p>
+    </div>`).join("");
+
+  // Accumulated spend
   document.getElementById("dev-cost-total").textContent = fmtUsd(data.costs.total_usd);
   document.getElementById("dev-cost-openai").textContent = fmtUsd(data.costs.openai.cost_usd);
-  document.getElementById("dev-openai-detail").textContent =
-    `${fmtNum(data.costs.openai.tokens_in)} in + ${fmtNum(data.costs.openai.tokens_out)} out tokens · ${data.costs.openai.calls} calls`;
+  document.getElementById("dev-openai-tokens").textContent =
+    fmtNum(data.costs.openai.tokens_in) + "↑ " + fmtNum(data.costs.openai.tokens_out) + "↓ tok";
   document.getElementById("dev-cost-cartesia").textContent = fmtUsd(data.costs.cartesia.cost_usd);
-  document.getElementById("dev-cartesia-detail").textContent =
-    `${fmtNum(data.costs.cartesia.characters)} chars · ${data.costs.cartesia.calls} requests`;
+  document.getElementById("dev-cartesia-chars").textContent = fmtNum(data.costs.cartesia.characters) + " chars";
 
   // Services
   document.getElementById("dev-services-body").innerHTML = data.services.map(s => {
@@ -231,7 +268,7 @@ async function loadDevDashboard() {
 
 // ── Chat ───────────────────────────────────────────────────────────────────────
 async function viewConversation(id) {
-  const data = await fetch(`/api/chat/${id}/history`).then(r => r.json());
+  const data = await fetch("/api/chat/" + id + "/history").then(r => r.json());
   showTab("chat");
   conversationId = id;
   const box = document.getElementById("chat-messages");
@@ -251,7 +288,6 @@ async function startChat() {
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({agent: currentAgent}),
   }).then(r => r.json());
-
   conversationId = res.conversation_id;
   const box = document.getElementById("chat-messages");
   box.innerHTML = "";
@@ -270,13 +306,11 @@ async function sendMessage() {
   if (!text || !conversationId) return;
   input.value = "";
   appendMessage("user", text);
-
   const res = await fetch("/api/chat/message", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({conversation_id: conversationId, message: text}),
   }).then(r => r.json());
-
   appendMessage("assistant", res.message);
   if (ttsEnabled) playTTS(res.message);
   if (res.ended) {
@@ -330,9 +364,10 @@ function appendMessage(role, content) {
     wrap.className = "text-center text-xs text-slate-500 py-2";
     wrap.textContent = content;
   } else {
-    wrap.className = `flex ${role === "user" ? "justify-end" : "justify-start"}`;
+    wrap.className = "flex " + (role === "user" ? "justify-end" : "justify-start");
     const bubble = document.createElement("div");
-    bubble.className = `max-w-xs lg:max-w-md px-4 py-2.5 rounded-2xl text-sm ${role === "user" ? "bg-indigo-600 text-white rounded-br-sm" : "bg-surface border border-border text-slate-200 rounded-bl-sm"}`;
+    bubble.className = "max-w-xs lg:max-w-md px-4 py-2.5 rounded-2xl text-sm " +
+      (role === "user" ? "bg-indigo-600 text-white rounded-br-sm" : "bg-surface border border-border text-slate-200 rounded-bl-sm");
     bubble.textContent = content;
     wrap.appendChild(bubble);
   }
