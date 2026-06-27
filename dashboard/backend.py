@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import openai
@@ -21,8 +21,8 @@ app = FastAPI(title="North York Voice Agents — Dashboard")
 FRONTEND = Path(__file__).parent / "frontend"
 
 AGENTS = {
-    "hvac": {"prompt": HVAC_PROMPT, "begin": HVAC_BEGIN},
-    "law_firm": {"prompt": LAW_PROMPT, "begin": LAW_BEGIN},
+    "hvac": {"prompt": HVAC_PROMPT, "begin": HVAC_BEGIN, "voice": "onyx"},
+    "law_firm": {"prompt": LAW_PROMPT, "begin": LAW_BEGIN, "voice": "nova"},
 }
 
 # ── Chat API ──────────────────────────────────────────────────────────────────
@@ -33,6 +33,10 @@ class StartRequest(BaseModel):
 class MessageRequest(BaseModel):
     conversation_id: str
     message: str
+
+class TTSRequest(BaseModel):
+    text: str
+    agent: str = "hvac"
 
 @app.post("/api/chat/start")
 async def chat_start(req: StartRequest):
@@ -72,6 +76,21 @@ async def chat_message(req: MessageRequest):
         end_conversation(req.conversation_id)
 
     return {"message": reply, "ended": ended}
+
+@app.post("/api/tts")
+async def tts(req: TTSRequest):
+    if req.agent not in AGENTS:
+        raise HTTPException(status_code=400, detail=f"Unknown agent: {req.agent}")
+    voice = AGENTS[req.agent]["voice"]
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    response = client.audio.speech.create(
+        model="tts-1",
+        voice=voice,
+        input=req.text,
+        response_format="mp3",
+    )
+    audio_bytes = response.content
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 
 @app.get("/api/chat/{conversation_id}/history")
 async def chat_history(conversation_id: str):
