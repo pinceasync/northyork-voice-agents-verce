@@ -13,7 +13,6 @@
             surface: "#0f1117",
             card:    "#1a1d27",
             border:  "#2a2d3a",
-            accent:  "#6366f1",
           }
         }
       }
@@ -92,12 +91,13 @@
   <!-- Chat Tab -->
   <div id="view-chat" class="hidden">
     <div class="max-w-2xl mx-auto px-4 py-6 flex flex-col" style="height: calc(100vh - 65px)">
-      <div class="flex items-center gap-3 mb-4">
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
         <select id="agent-select" class="bg-card border border-border text-white rounded-lg px-3 py-2 text-sm">
           <option value="hvac">Dante — North York HVAC</option>
           <option value="law_firm">Claire — North York Law Firm</option>
         </select>
         <button onclick="startChat()" id="start-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium">Start Conversation</button>
+        <button onclick="toggleTTS()" id="tts-btn" class="bg-card border border-border hover:border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm">🔇 Voice Off</button>
         <button onclick="resetChat()" id="reset-btn" class="hidden bg-card border border-border hover:border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm">Reset</button>
       </div>
 
