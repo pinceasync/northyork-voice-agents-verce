@@ -31,6 +31,7 @@
     <div class="flex gap-2">
       <button onclick="showTab('overview')" id="tab-overview" class="tab-btn active px-4 py-1.5 rounded-lg text-sm">Overview</button>
       <button onclick="showTab('chat')" id="tab-chat" class="tab-btn px-4 py-1.5 rounded-lg text-sm">Test Agent</button>
+      <button onclick="showTab('dev')" id="tab-dev" class="tab-btn px-4 py-1.5 rounded-lg text-sm">Dev Dashboard</button>
     </div>
   </header>
 
@@ -117,6 +118,103 @@
           class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-lg text-sm font-medium">Send</button>
       </div>
     </div>
+  </div>
+
+  <!-- Dev Dashboard Tab -->
+  <div id="view-dev" class="hidden">
+    <main class="px-8 py-6 max-w-7xl mx-auto space-y-8">
+
+      <div class="flex items-center justify-between">
+        <h1 class="text-lg font-semibold text-white">Development Dashboard</h1>
+        <button onclick="loadDevDashboard()" class="bg-card border border-border hover:border-slate-500 text-slate-300 px-3 py-1.5 rounded-lg text-xs">↻ Refresh</button>
+      </div>
+
+      <!-- Cost Tracker -->
+      <section>
+        <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Cost Tracker <span class="normal-case font-normal text-slate-600 ml-1">— all time, estimated</span></h2>
+        <div class="grid grid-cols-3 gap-4">
+          <div class="bg-card border border-border rounded-xl p-5">
+            <p class="text-xs text-slate-400 uppercase tracking-widest mb-1">Total Spend</p>
+            <p class="text-3xl font-bold text-white" id="dev-cost-total">—</p>
+            <p class="text-xs text-slate-500 mt-1">OpenAI + Cartesia</p>
+          </div>
+          <div class="bg-card border border-border rounded-xl p-5">
+            <p class="text-xs text-slate-400 uppercase tracking-widest mb-1">OpenAI</p>
+            <p class="text-2xl font-bold text-white" id="dev-cost-openai">—</p>
+            <p class="text-xs text-slate-500 mt-1" id="dev-openai-detail">—</p>
+          </div>
+          <div class="bg-card border border-border rounded-xl p-5">
+            <p class="text-xs text-slate-400 uppercase tracking-widest mb-1">Cartesia</p>
+            <p class="text-2xl font-bold text-white" id="dev-cost-cartesia">—</p>
+            <p class="text-xs text-slate-500 mt-1" id="dev-cartesia-detail">—</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Services + Activity -->
+      <div class="grid grid-cols-2 gap-6">
+
+        <!-- Services -->
+        <section>
+          <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Services</h2>
+          <div class="bg-card border border-border rounded-xl overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-border text-xs text-slate-400 uppercase tracking-widest">
+                  <th class="text-left px-5 py-3">Service</th>
+                  <th class="text-left px-5 py-3">Model</th>
+                  <th class="text-left px-5 py-3">Purpose</th>
+                  <th class="text-left px-5 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody id="dev-services-body">
+                <tr><td colspan="4" class="px-5 py-6 text-slate-500 text-center">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Activity -->
+        <section>
+          <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Activity</h2>
+          <div class="bg-card border border-border rounded-xl p-5 grid grid-cols-2 gap-5">
+            <div>
+              <p class="text-xs text-slate-400 mb-1">Conversations</p>
+              <p class="text-2xl font-bold text-white" id="dev-convs">—</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 mb-1">Active Now</p>
+              <p class="text-2xl font-bold text-green-400" id="dev-active">—</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 mb-1">Messages</p>
+              <p class="text-2xl font-bold text-white" id="dev-messages">—</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 mb-1">Leads Captured</p>
+              <p class="text-2xl font-bold text-white" id="dev-leads">—</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 mb-1">LLM Calls</p>
+              <p class="text-2xl font-bold text-white" id="dev-llm-calls">—</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 mb-1">TTS Requests</p>
+              <p class="text-2xl font-bold text-white" id="dev-tts-calls">—</p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Agents Under Test -->
+      <section>
+        <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Agents Under Test</h2>
+        <div class="grid grid-cols-2 gap-4" id="dev-agents">
+          <div class="bg-card border border-border rounded-xl p-5 text-slate-500 text-sm">Loading…</div>
+        </div>
+      </section>
+
+    </main>
   </div>
 
   <script src="/static/app.js"></script>
