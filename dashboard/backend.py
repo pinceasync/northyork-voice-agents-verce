@@ -35,6 +35,19 @@ AGENTS = {
     },
 }
 
+# Per-minute cost breakdown for the live voice pipeline (not the dashboard chat)
+PER_MINUTE_COMPONENTS = [
+    {"service": "Twilio",   "detail": "inbound PSTN",        "cost": 0.0085},
+    {"service": "Deepgram", "detail": "Flux STT",             "cost": 0.0077},
+    {"service": "Cartesia", "detail": "sonic-2 TTS",          "cost": 0.0300},
+    {"service": "OpenAI",   "detail": "gpt-4o-mini LLM",      "cost": 0.0020},
+    {"service": "LiveKit",  "detail": "cloud orchestration",  "cost": 0.0004},
+    {"service": "OpenAI",   "detail": "post-call analysis",   "cost": 0.0001},
+]
+TOTAL_PER_MIN = round(sum(c["cost"] for c in PER_MINUTE_COMPONENTS), 4)
+
+AVG_CALL_MIN = 3
+
 class StartRequest(BaseModel):
     agent: str = "hvac"
 
@@ -222,6 +235,23 @@ async def dev_stats():
     convs = list_conversations(1000)
     leads = list_leads(1000)
 
+    # Per-call projections assuming AVG_CALL_MIN minutes
+    volumes = [
+        {"calls": 300,  "label": "300 calls/mo"},
+        {"calls": 500,  "label": "500 calls/mo"},
+        {"calls": 1000, "label": "1,000 calls/mo"},
+    ]
+    projections = [
+        {
+            "label": v["label"],
+            "minutes": v["calls"] * AVG_CALL_MIN,
+            "pipeline_cost": round(v["calls"] * AVG_CALL_MIN * TOTAL_PER_MIN, 2),
+            "hosting_cost": 10.00,
+            "total": round(v["calls"] * AVG_CALL_MIN * TOTAL_PER_MIN + 10, 2),
+        }
+        for v in volumes
+    ]
+
     return {
         "costs": {
             "openai": {
@@ -236,6 +266,13 @@ async def dev_stats():
                 "calls": car["calls"],
             },
             "total_usd": round((oai["total_cost"] or 0) + (car["total_cost"] or 0), 6),
+        },
+        "per_minute": {
+            "components": PER_MINUTE_COMPONENTS,
+            "total": TOTAL_PER_MIN,
+            "avg_call_min": AVG_CALL_MIN,
+            "cost_per_call": round(TOTAL_PER_MIN * AVG_CALL_MIN, 4),
+            "projections": projections,
         },
         "services": services,
         "agents": agents_info,
