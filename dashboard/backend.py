@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import os
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -20,9 +21,18 @@ app = FastAPI(title="North York Voice Agents — Dashboard")
 
 FRONTEND = Path(__file__).parent / "frontend"
 
+# Cartesia voice IDs
 AGENTS = {
-    "hvac": {"prompt": HVAC_PROMPT, "begin": HVAC_BEGIN, "voice": "onyx"},
-    "law_firm": {"prompt": LAW_PROMPT, "begin": LAW_BEGIN, "voice": "nova"},
+    "hvac": {
+        "prompt": HVAC_PROMPT,
+        "begin": HVAC_BEGIN,
+        "voice_id": "e98bd614-9b9d-4031-b930-ed72482af858",  # Jasper — Australian male
+    },
+    "law_firm": {
+        "prompt": LAW_PROMPT,
+        "begin": LAW_BEGIN,
+        "voice_id": "dc30854e-e398-4579-9dc8-16f6cb2c19b9",  # Victoria — British professional female
+    },
 }
 
 # ── Chat API ──────────────────────────────────────────────────────────────────
@@ -81,16 +91,31 @@ async def chat_message(req: MessageRequest):
 async def tts(req: TTSRequest):
     if req.agent not in AGENTS:
         raise HTTPException(status_code=400, detail=f"Unknown agent: {req.agent}")
-    voice = AGENTS[req.agent]["voice"]
-    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    response = client.audio.speech.create(
-        model="tts-1",
-        voice=voice,
-        input=req.text,
-        response_format="mp3",
-    )
-    audio_bytes = response.content
-    return Response(content=audio_bytes, media_type="audio/mpeg")
+    voice_id = AGENTS[req.agent]["voice_id"]
+    api_key = os.environ["CARTESIA_API_KEY"]
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.cartesia.ai/tts/bytes",
+            headers={
+                "X-API-Key": api_key,
+                "Cartesia-Version": "2024-06-10",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model_id": "sonic-2",
+                "transcript": req.text,
+                "voice": {"mode": "id", "id": voice_id},
+                "output_format": {
+                    "container": "mp3",
+                    "encoding": "mp3",
+                    "sample_rate": 44100,
+                },
+            },
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Cartesia error: {resp.text[:200]}")
+    return Response(content=resp.content, media_type="audio/mpeg")
 
 @app.get("/api/chat/{conversation_id}/history")
 async def chat_history(conversation_id: str):
