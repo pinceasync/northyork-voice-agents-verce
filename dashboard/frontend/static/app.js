@@ -1,4 +1,6 @@
 let conversationId = null;
+let ttsEnabled = false;
+let currentAgent = "hvac";
 
 function showTab(name) {
   document.getElementById("view-overview").classList.toggle("hidden", name !== "overview");
@@ -10,9 +12,9 @@ function showTab(name) {
 
 async function loadOverview() {
   const [stats, leads, convs] = await Promise.all([
-    fetch("/api/stats").then(r => r.json()),
-    fetch("/api/leads").then(r => r.json()),
-    fetch("/api/conversations").then(r => r.json()),
+    fetch("/api/stats").then(r => r.json()).catch(() => ({})),
+    fetch("/api/leads").then(r => r.json()).catch(() => []),
+    fetch("/api/conversations").then(r => r.json()).catch(() => []),
   ]);
 
   document.getElementById("stat-calls").textContent = stats.calls_today ?? "—";
@@ -32,7 +34,7 @@ async function loadOverview() {
   convsBody.innerHTML = convs.length ? convs.map(c => `
     <tr class="border-t border-border hover:bg-surface">
       <td class="px-5 py-3">${c.agent}</td>
-      <td class="px-5 py-3"><span class="text-xs px-2 py-1 rounded-full ${c.status === "active" ? "bg-green/10 text-green-400 border border-green-800" : "bg-surface text-slate-400 border border-border"}">${c.status}</span></td>
+      <td class="px-5 py-3"><span class="text-xs px-2 py-1 rounded-full ${c.status === "active" ? "bg-green-900 text-green-400 border border-green-800" : "bg-surface text-slate-400 border border-border"}">${c.status}</span></td>
       <td class="px-5 py-3 text-slate-400 text-xs">${c.started_at}</td>
       <td class="px-5 py-3"><button onclick="viewConversation('${c._id}')" class="text-xs text-indigo-400 hover:underline">View</button></td>
     </tr>`).join("") : '<tr><td colspan="4" class="px-5 py-6 text-slate-500 text-center">No conversations yet</td></tr>';
@@ -53,17 +55,18 @@ async function viewConversation(id) {
 }
 
 async function startChat() {
-  const agent = document.getElementById("agent-select").value;
+  currentAgent = document.getElementById("agent-select").value;
   const res = await fetch("/api/chat/start", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({agent}),
+    body: JSON.stringify({agent: currentAgent}),
   }).then(r => r.json());
 
   conversationId = res.conversation_id;
   const box = document.getElementById("chat-messages");
   box.innerHTML = "";
   appendMessage("assistant", res.message);
+  if (ttsEnabled) playTTS(res.message);
   document.getElementById("chat-input").disabled = false;
   document.getElementById("send-btn").disabled = false;
   document.getElementById("chat-input").focus();
@@ -76,6 +79,8 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text || !conversationId) return;
   input.value = "";
+  input.disabled = true;
+  document.getElementById("send-btn").disabled = true;
   appendMessage("user", text);
 
   const res = await fetch("/api/chat/message", {
@@ -85,11 +90,40 @@ async function sendMessage() {
   }).then(r => r.json());
 
   appendMessage("assistant", res.message);
+  if (ttsEnabled) playTTS(res.message);
+
   if (res.ended) {
-    document.getElementById("chat-input").disabled = true;
-    document.getElementById("send-btn").disabled = true;
     appendMessage("system", "— Conversation ended —");
+  } else {
+    input.disabled = false;
+    document.getElementById("send-btn").disabled = false;
+    input.focus();
   }
+}
+
+async function playTTS(text) {
+  try {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text, agent: currentAgent}),
+    });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.play();
+    audio.onended = () => URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("TTS error:", e);
+  }
+}
+
+function toggleTTS() {
+  ttsEnabled = !ttsEnabled;
+  const btn = document.getElementById("tts-btn");
+  btn.textContent = ttsEnabled ? "🔊 Voice On" : "🔇 Voice Off";
+  btn.classList.toggle("bg-indigo-600", ttsEnabled);
+  btn.classList.toggle("bg-card", !ttsEnabled);
 }
 
 function resetChat() {
