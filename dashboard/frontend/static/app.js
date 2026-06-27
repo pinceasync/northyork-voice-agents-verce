@@ -57,7 +57,6 @@ function _stopKeyboardAmbience() {
   _keyboardTimer = null;
 }
 
-// Start ambient sounds — called when TTS audio begins playing
 function _startAmbience() {
   if (_ambienceNode) return;
   const ctx = audioCtx();
@@ -100,7 +99,6 @@ function _startAmbience() {
   _startKeyboardAmbience();
 }
 
-// Stop ambient sounds — called when TTS audio ends
 function _stopAmbience() {
   _stopKeyboardAmbience();
   if (!_ambienceNode || !_ambienceGain) return;
@@ -116,15 +114,18 @@ function _stopAmbience() {
   }, 500);
 }
 
-// ── Tab / overview ─────────────────────────────────────────────────────────────
+// ── Tab routing ───────────────────────────────────────────────────────────────
 function showTab(name) {
-  document.getElementById("view-overview").classList.toggle("hidden", name !== "overview");
-  document.getElementById("view-chat").classList.toggle("hidden", name !== "chat");
+  ["overview", "chat", "dev"].forEach(t => {
+    document.getElementById("view-" + t).classList.toggle("hidden", t !== name);
+  });
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
   document.getElementById("tab-" + name).classList.add("active");
   if (name === "overview") loadOverview();
+  if (name === "dev") loadDevDashboard();
 }
 
+// ── Overview ──────────────────────────────────────────────────────────────────
 async function loadOverview() {
   const [stats, leads, convs] = await Promise.all([
     fetch("/api/stats").then(r => r.json()),
@@ -154,6 +155,81 @@ async function loadOverview() {
     </tr>`).join("") : '<tr><td colspan="4" class="px-5 py-6 text-slate-500 text-center">No conversations yet</td></tr>';
 }
 
+// ── Dev Dashboard ─────────────────────────────────────────────────────────────
+function fmtNum(n) {
+  if (!n) return "0";
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+  return n.toString();
+}
+
+function fmtUsd(n) {
+  if (!n) return "$0.000000";
+  if (n < 0.01) return "$" + n.toFixed(6);
+  return "$" + n.toFixed(4);
+}
+
+async function loadDevDashboard() {
+  const data = await fetch("/api/dev/stats").then(r => r.json());
+
+  // Costs
+  document.getElementById("dev-cost-total").textContent = fmtUsd(data.costs.total_usd);
+  document.getElementById("dev-cost-openai").textContent = fmtUsd(data.costs.openai.cost_usd);
+  document.getElementById("dev-openai-detail").textContent =
+    `${fmtNum(data.costs.openai.tokens_in)} in + ${fmtNum(data.costs.openai.tokens_out)} out tokens · ${data.costs.openai.calls} calls`;
+  document.getElementById("dev-cost-cartesia").textContent = fmtUsd(data.costs.cartesia.cost_usd);
+  document.getElementById("dev-cartesia-detail").textContent =
+    `${fmtNum(data.costs.cartesia.characters)} chars · ${data.costs.cartesia.calls} requests`;
+
+  // Services
+  document.getElementById("dev-services-body").innerHTML = data.services.map(s => {
+    const ok = s.status === "ok" || s.status === "configured";
+    return `
+      <tr class="border-t border-border">
+        <td class="px-5 py-3">
+          <span class="inline-flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full ${ok ? "bg-green-400" : "bg-yellow-500"} flex-shrink-0"></span>
+            <span class="font-medium text-white">${s.name}</span>
+          </span>
+        </td>
+        <td class="px-5 py-3 text-slate-400 font-mono text-xs">${s.detail}</td>
+        <td class="px-5 py-3 text-slate-500 text-xs">${s.purpose}</td>
+        <td class="px-5 py-3 text-xs ${ok ? "text-green-400" : "text-yellow-400"}">${s.status}</td>
+      </tr>`;
+  }).join("");
+
+  // Activity
+  const a = data.activity;
+  document.getElementById("dev-convs").textContent = a.conversations;
+  document.getElementById("dev-active").textContent = a.active_conversations;
+  document.getElementById("dev-messages").textContent = a.total_messages;
+  document.getElementById("dev-leads").textContent = a.leads_captured;
+  document.getElementById("dev-llm-calls").textContent = a.llm_calls;
+  document.getElementById("dev-tts-calls").textContent = a.tts_requests;
+
+  // Agents
+  document.getElementById("dev-agents").innerHTML = data.agents.map(ag => `
+    <div class="bg-card border border-border rounded-xl p-5">
+      <div class="flex items-start justify-between mb-4">
+        <div>
+          <p class="font-semibold text-white text-base">${ag.name}</p>
+          <p class="text-slate-400 text-sm">${ag.role}</p>
+        </div>
+        <span class="text-xs bg-indigo-950 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded-full">testing</span>
+      </div>
+      <div class="space-y-2 text-xs">
+        <div class="flex gap-3"><span class="text-slate-500 w-12 flex-shrink-0">Voice</span><span class="text-slate-300">${ag.voice}</span></div>
+        <div class="flex gap-3"><span class="text-slate-500 w-12 flex-shrink-0">LLM</span><span class="text-slate-300">${ag.model}</span></div>
+        <div class="flex gap-3"><span class="text-slate-500 w-12 flex-shrink-0">TTS</span><span class="text-slate-300">${ag.tts_model}</span></div>
+        <div class="flex gap-3 flex-wrap items-start">
+          <span class="text-slate-500 w-12 flex-shrink-0 mt-0.5">Tools</span>
+          <div class="flex flex-wrap gap-1">${ag.tools.map(t => `<span class="bg-surface border border-border px-2 py-0.5 rounded font-mono text-slate-300">${t}</span>`).join("")}</div>
+        </div>
+      </div>
+    </div>`).join("");
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────────────
 async function viewConversation(id) {
   const data = await fetch(`/api/chat/${id}/history`).then(r => r.json());
   showTab("chat");
@@ -168,7 +244,6 @@ async function viewConversation(id) {
   document.getElementById("start-btn").classList.add("hidden");
 }
 
-// ── Chat ───────────────────────────────────────────────────────────────────────
 async function startChat() {
   currentAgent = document.getElementById("agent-select").value;
   const res = await fetch("/api/chat/start", {
@@ -211,7 +286,6 @@ async function sendMessage() {
   }
 }
 
-// Play TTS — ambient sounds start when audio plays, stop when it ends
 async function playTTS(text) {
   try {
     const res = await fetch("/api/tts", {
