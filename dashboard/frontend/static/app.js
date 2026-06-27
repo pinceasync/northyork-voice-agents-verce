@@ -2,6 +2,86 @@ let conversationId = null;
 let ttsEnabled = false;
 let currentAgent = "hvac";
 
+// ── Audio context (created lazily on first user gesture) ──────────────────────
+let _audioCtx = null;
+let _ambienceNode = null;
+let _ambienceGain = null;
+
+function audioCtx() {
+  if (!_audioCtx) {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (_audioCtx.state === "suspended") _audioCtx.resume();
+  return _audioCtx;
+}
+
+// Synthesised keyboard click: filtered noise burst
+function playKeyClick() {
+  const ctx = audioCtx();
+  const len = Math.floor(ctx.sampleRate * 0.04);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const env = Math.pow(1 - i / len, 4);
+    data[i] = (Math.random() * 2 - 1) * env;
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+
+  const bpf = ctx.createBiquadFilter();
+  bpf.type = "bandpass";
+  bpf.frequency.value = 2400 + Math.random() * 600;
+  bpf.Q.value = 0.8;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.22, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+
+  src.connect(bpf);
+  bpf.connect(gain);
+  gain.connect(ctx.destination);
+  src.start();
+}
+
+// Pink noise office ambience using a ScriptProcessor
+function startAmbience() {
+  if (_ambienceNode) return;
+  const ctx = audioCtx();
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+  _ambienceNode = ctx.createScriptProcessor(4096, 1, 1);
+  _ambienceNode.onaudioprocess = (e) => {
+    const out = e.outputBuffer.getChannelData(0);
+    for (let i = 0; i < out.length; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886*b0 + w*0.0555179;
+      b1 = 0.99332*b1 + w*0.0750759;
+      b2 = 0.96900*b2 + w*0.1538520;
+      b3 = 0.86650*b3 + w*0.3104856;
+      b4 = 0.55000*b4 + w*0.5329522;
+      b5 = -0.7616*b5 - w*0.0168980;
+      out[i] = (b0+b1+b2+b3+b4+b5+b6+w*0.5362) * 0.11;
+      b6 = w * 0.115926;
+    }
+  };
+  _ambienceGain = ctx.createGain();
+  _ambienceGain.gain.setValueAtTime(0, ctx.currentTime);
+  _ambienceGain.gain.linearRampToValueAtTime(0.045, ctx.currentTime + 2);
+  _ambienceNode.connect(_ambienceGain);
+  _ambienceGain.connect(ctx.destination);
+}
+
+function stopAmbience() {
+  if (!_ambienceNode || !_ambienceGain) return;
+  const ctx = audioCtx();
+  _ambienceGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.5);
+  setTimeout(() => {
+    try { _ambienceNode.disconnect(); _ambienceGain.disconnect(); } catch(_) {}
+    _ambienceNode = null;
+    _ambienceGain = null;
+  }, 1600);
+}
+
+// ── Tab / overview ─────────────────────────────────────────────────────────────
 function showTab(name) {
   document.getElementById("view-overview").classList.toggle("hidden", name !== "overview");
   document.getElementById("view-chat").classList.toggle("hidden", name !== "chat");
@@ -54,6 +134,7 @@ async function viewConversation(id) {
   document.getElementById("start-btn").classList.add("hidden");
 }
 
+// ── Chat ───────────────────────────────────────────────────────────────────────
 async function startChat() {
   currentAgent = document.getElementById("agent-select").value;
   const res = await fetch("/api/chat/start", {
@@ -66,7 +147,10 @@ async function startChat() {
   const box = document.getElementById("chat-messages");
   box.innerHTML = "";
   appendMessage("assistant", res.message);
-  if (ttsEnabled) playTTS(res.message);
+  if (ttsEnabled) {
+    playTTS(res.message);
+    startAmbience();
+  }
   document.getElementById("chat-input").disabled = false;
   document.getElementById("send-btn").disabled = false;
   document.getElementById("chat-input").focus();
@@ -93,6 +177,7 @@ async function sendMessage() {
     document.getElementById("chat-input").disabled = true;
     document.getElementById("send-btn").disabled = true;
     appendMessage("system", "— Conversation ended —");
+    stopAmbience();
   }
 }
 
@@ -121,10 +206,16 @@ function toggleTTS() {
   btn.classList.toggle("bg-indigo-600", ttsEnabled);
   btn.classList.toggle("border-indigo-600", ttsEnabled);
   btn.classList.toggle("text-white", ttsEnabled);
+  if (ttsEnabled && conversationId) {
+    startAmbience();
+  } else {
+    stopAmbience();
+  }
 }
 
 function resetChat() {
   conversationId = null;
+  stopAmbience();
   document.getElementById("chat-messages").innerHTML = '<p class="text-slate-500 text-sm text-center">Select an agent and start a conversation</p>';
   document.getElementById("chat-input").disabled = true;
   document.getElementById("send-btn").disabled = true;
@@ -148,6 +239,13 @@ function appendMessage(role, content) {
   box.appendChild(wrap);
   box.scrollTop = box.scrollHeight;
 }
+
+// Keyboard click on every keydown in the chat input
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("chat-input").addEventListener("keydown", () => {
+    playKeyClick();
+  });
+});
 
 loadOverview();
 setInterval(loadOverview, 30000);
