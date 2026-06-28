@@ -93,21 +93,29 @@
   <!-- Chat Tab -->
   <div id="view-chat" class="hidden">
     <div class="max-w-2xl mx-auto px-4 py-6 flex flex-col" style="height: calc(100vh - 65px)">
-      <div class="flex items-center gap-2 mb-4 flex-wrap">
-        <select id="agent-select" class="bg-card border border-border text-white rounded-lg px-3 py-2 text-sm">
-          <option value="hvac">Dante — North York HVAC</option>
-          <option value="law_firm">Claire — North York Law Firm</option>
-        </select>
-        <button onclick="startChat()" id="start-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium">Start</button>
+      <div class="flex items-center gap-3 mb-4">
+        <!-- Fixed agent label -->
+        <div class="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
+          <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+          <span class="text-sm text-white font-medium">Claire</span>
+          <span class="text-xs text-slate-400">— North York Law Firm</span>
+        </div>
+        <button onclick="startChat()" id="start-btn"
+          class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium">
+          Start
+        </button>
         <button onclick="toggleTTS()" id="tts-btn"
           class="bg-card border border-border hover:border-slate-500 text-slate-300 px-3 py-2 rounded-lg text-sm">
           🔇 Voice Off
         </button>
-        <button onclick="resetChat()" id="reset-btn" class="hidden bg-card border border-border hover:border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm">Reset</button>
+        <button onclick="resetChat()" id="reset-btn"
+          class="hidden bg-card border border-border hover:border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm">
+          Reset
+        </button>
       </div>
 
       <div id="chat-messages" class="flex-1 overflow-y-auto space-y-3 mb-4 bg-card border border-border rounded-xl p-4">
-        <p class="text-slate-500 text-sm text-center">Select an agent and start a conversation</p>
+        <p class="text-slate-500 text-sm text-center">Press Start to connect to Claire</p>
       </div>
 
       <div class="flex gap-2">
@@ -115,7 +123,9 @@
           class="flex-1 bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           onkeydown="if(event.key==='Enter') sendMessage()" />
         <button onclick="sendMessage()" id="send-btn" disabled
-          class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-lg text-sm font-medium">Send</button>
+          class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-lg text-sm font-medium">
+          Send
+        </button>
       </div>
     </div>
   </div>
@@ -129,7 +139,7 @@
         <button onclick="loadDevDashboard()" class="bg-card border border-border hover:border-slate-500 text-slate-300 px-3 py-1.5 rounded-lg text-xs">↻ Refresh</button>
       </div>
 
-      <!-- Per-Minute Cost (live voice pipeline) -->
+      <!-- Per-Minute Cost -->
       <section>
         <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Live Call Cost — per minute <span class="normal-case font-normal text-slate-600 ml-1">(current pipeline configuration)</span></h2>
         <div class="bg-card border border-border rounded-xl p-6">
@@ -143,11 +153,7 @@
               <p class="text-2xl font-semibold text-slate-200" id="dev-cost-per-call">—</p>
             </div>
           </div>
-
-          <!-- Breakdown rows -->
           <div class="space-y-3" id="dev-permin-rows"></div>
-
-          <!-- Monthly projections -->
           <div class="mt-6 pt-5 border-t border-border">
             <p class="text-xs text-slate-400 uppercase tracking-widest mb-3">Monthly projections <span class="normal-case font-normal text-slate-600">(avg 3 min/call + $10 Railway hosting)</span></p>
             <div class="grid grid-cols-3 gap-3" id="dev-projections"></div>
@@ -155,10 +161,8 @@
         </div>
       </section>
 
-      <!-- Accumulated Dashboard Costs + Activity -->
+      <!-- Dashboard API Spend + Activity -->
       <div class="grid grid-cols-2 gap-6">
-
-        <!-- Accumulated API spend (dashboard testing only) -->
         <section>
           <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Dashboard API Spend <span class="normal-case font-normal text-slate-600 ml-1">— testing only, all time</span></h2>
           <div class="bg-card border border-border rounded-xl p-5 space-y-4">
@@ -179,7 +183,6 @@
           </div>
         </section>
 
-        <!-- Activity -->
         <section>
           <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Activity</h2>
           <div class="bg-card border border-border rounded-xl p-5 grid grid-cols-2 gap-5">
