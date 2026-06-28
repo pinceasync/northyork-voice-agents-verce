@@ -195,6 +195,31 @@ async def tts_audio(text: str, agent: str = "law_firm"):
     return Response(content=resp.content, media_type="audio/mpeg")
 
 
+RETELL_API_KEY = "key_3cafc02ce4e3baa92c87778d034f"
+RETELL_AGENT_ID = "agent_bc4727552807520165c4fc5547"
+
+
+@app.post("/api/retell/incoming")
+async def retell_incoming(request: Request):
+    """Registers an inbound Twilio call with Retell, then bridges via SIP."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        reg = await client.post(
+            "https://api.retellai.com/v2/register-phone-call",
+            headers={"Authorization": f"Bearer {RETELL_API_KEY}", "Content-Type": "application/json"},
+            json={"agent_id": RETELL_AGENT_ID},
+        )
+    if reg.status_code != 201:
+        raise HTTPException(status_code=502, detail=f"Retell register failed: {reg.text[:200]}")
+    call_id = reg.json()["call_id"]
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial>
+    <Sip>sip:{call_id}@sip.retellai.com</Sip>
+  </Dial>
+</Response>"""
+    return Response(content=twiml, media_type="application/xml")
+
+
 @app.post("/api/twilio/incoming")
 async def twilio_incoming(request: Request):
     base = _base_url(request)
