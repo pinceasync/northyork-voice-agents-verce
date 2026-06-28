@@ -1,7 +1,6 @@
-﻿﻿﻿﻿﻿let conversationId = null;
+﻿﻿﻿﻿﻿﻿let conversationId = null;
 let ttsEnabled = false;
 const currentAgent = "law_firm";
-let _recognition = null;
 let _micActive = false;
 let _currentSrc = null; // currently playing TTS source node
 
@@ -150,69 +149,93 @@ function _stopKeyboardAmbience() {
   _keyboardTimer = null;
 }
 
-// ── Voice input (SpeechRecognition) ──────────────────────────────────────────
+// ── Voice input (MediaRecorder → Whisper) ────────────────────────────────────
+let _mediaRecorder = null;
+let _audioChunks = [];
+
 function toggleMic() {
   _micActive ? _stopMic() : _startMic();
 }
 
-function _startMic() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    appendMessage("system", "Speech recognition not supported — try Chrome or Edge.");
+async function _startMic() {
+  if (!navigator.mediaDevices) {
+    appendMessage("system", "Mic not available — use HTTPS.");
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    appendMessage("system", "Mic access denied.");
     return;
   }
 
   // Stop any playing TTS so the mic doesn't pick it up
   if (_currentSrc) { try { _currentSrc.stop(); } catch(_) {} _currentSrc = null; }
 
-  _recognition = new SR();
-  _recognition.lang = "en-US";
-  _recognition.interimResults = true;
-  _recognition.continuous = false;
+  _audioChunks = [];
+  _mediaRecorder = new MediaRecorder(stream);
 
-  const btn = document.getElementById("mic-btn");
-  const input = document.getElementById("chat-input");
-
-  _recognition.onstart = () => {
-    _micActive = true;
-    btn.textContent = "⏹";
-    btn.classList.add("bg-red-600", "border-red-600", "text-white");
-    btn.classList.remove("text-slate-300");
-    input.placeholder = "Listening…";
-    input.value = "";
-    _setAmbienceLevel(AMBIENCE_BG, 0.15); // drop ambience while listening
+  _mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) _audioChunks.push(e.data);
   };
 
-  _recognition.onresult = (e) => {
-    const transcript = Array.from(e.results).map(r => r[0].transcript).join("");
-    input.value = transcript;
-    if (e.results[e.results.length - 1].isFinal) {
-      _stopMic();
-      if (transcript.trim()) sendMessage();
+  _mediaRecorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    const btn = document.getElementById("mic-btn");
+    const input = document.getElementById("chat-input");
+    input.placeholder = "Transcribing…";
+    btn.textContent = "⏳";
+
+    const mimeType = _mediaRecorder.mimeType || "audio/webm";
+    const ext = mimeType.includes("ogg") ? "ogg" : "webm";
+    const blob = new Blob(_audioChunks, { type: mimeType });
+
+    const fd = new FormData();
+    fd.append("audio", blob, "audio." + ext);
+
+    try {
+      const res = await fetch("/api/stt", { method: "POST", body: fd });
+      if (res.ok) {
+        const { text } = await res.json();
+        if (text && text.trim()) {
+          input.value = text.trim();
+          sendMessage();
+        }
+      } else {
+        appendMessage("system", "Transcription failed: HTTP " + res.status);
+      }
+    } catch (e) {
+      appendMessage("system", "Transcription error: " + e.message);
     }
-  };
 
-  _recognition.onerror = (e) => {
-    if (e.error !== "no-speech") appendMessage("system", "Mic error: " + e.error);
-    _stopMic();
-  };
-
-  _recognition.onend = () => { _stopMic(); };
-
-  _recognition.start();
-}
-
-function _stopMic() {
-  if (_recognition) { try { _recognition.stop(); } catch(_) {} _recognition = null; }
-  _micActive = false;
-  const btn = document.getElementById("mic-btn");
-  if (btn) {
+    input.placeholder = "Type or tap 🎤 to speak…";
     btn.textContent = "🎤";
     btn.classList.remove("bg-red-600", "border-red-600", "text-white");
     btn.classList.add("text-slate-300");
-  }
+  };
+
+  _mediaRecorder.start();
+  _micActive = true;
+  _setAmbienceLevel(AMBIENCE_BG, 0.15);
+
+  const btn = document.getElementById("mic-btn");
   const input = document.getElementById("chat-input");
-  if (input) input.placeholder = "Type or tap 🎤 to speak…";
+  btn.textContent = "⏹";
+  btn.classList.add("bg-red-600", "border-red-600", "text-white");
+  btn.classList.remove("text-slate-300");
+  input.placeholder = "Listening… tap ⏹ to send";
+  input.value = "";
+
+  // Auto-stop after 30s
+  setTimeout(() => { if (_micActive) _stopMic(); }, 30000);
+}
+
+function _stopMic() {
+  if (_mediaRecorder && _mediaRecorder.state !== "inactive") {
+    _mediaRecorder.stop();
+  }
+  _micActive = false;
 }
 
 // ── Tab routing ───────────────────────────────────────────────────────────────
@@ -548,6 +571,7 @@ function appendMessage(role, content) {
 
 loadOverview();
 setInterval(loadOverview, 30000);
+
 
 
 
