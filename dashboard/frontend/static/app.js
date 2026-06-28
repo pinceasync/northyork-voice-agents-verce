@@ -399,12 +399,12 @@ async function playTTS(text) {
     const gain = ctx.createGain();
     const now = ctx.currentTime;
     const dur = audioBuf.duration;
-    const fadeAt = Math.max(0, dur - 0.45);
+    const fadeAt = Math.max(0, dur - 0.7);
 
     gain.gain.setValueAtTime(1, now);
     if (fadeAt > 0) {
       gain.gain.setValueAtTime(1, now + fadeAt);
-      gain.gain.linearRampToValueAtTime(0.001, now + dur);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur + 0.1);
     }
 
     src.connect(gain);
