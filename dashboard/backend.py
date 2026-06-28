@@ -35,7 +35,6 @@ AGENTS = {
     },
 }
 
-# Per-minute cost breakdown for the live voice pipeline (not the dashboard chat)
 PER_MINUTE_COMPONENTS = [
     {"service": "Twilio",   "detail": "inbound PSTN",        "cost": 0.0085},
     {"service": "Deepgram", "detail": "Flux STT",             "cost": 0.0077},
@@ -45,19 +44,22 @@ PER_MINUTE_COMPONENTS = [
     {"service": "OpenAI",   "detail": "post-call analysis",   "cost": 0.0001},
 ]
 TOTAL_PER_MIN = round(sum(c["cost"] for c in PER_MINUTE_COMPONENTS), 4)
-
 AVG_CALL_MIN = 3
 
+
 class StartRequest(BaseModel):
-    agent: str = "hvac"
+    agent: str = "law_firm"
+
 
 class MessageRequest(BaseModel):
     conversation_id: str
     message: str
 
+
 class TTSRequest(BaseModel):
     text: str
-    agent: str = "hvac"
+    agent: str = "law_firm"
+
 
 @app.post("/api/chat/start")
 async def chat_start(req: StartRequest):
@@ -67,6 +69,7 @@ async def chat_start(req: StartRequest):
     begin = AGENTS[req.agent]["begin"]
     add_message(conversation_id, "assistant", begin)
     return {"conversation_id": conversation_id, "message": begin}
+
 
 @app.post("/api/chat/message")
 async def chat_message(req: MessageRequest):
@@ -108,6 +111,7 @@ async def chat_message(req: MessageRequest):
 
     return {"message": reply, "ended": ended}
 
+
 @app.post("/api/tts")
 async def tts(req: TTSRequest):
     if req.agent not in AGENTS:
@@ -126,7 +130,11 @@ async def tts(req: TTSRequest):
             json={
                 "model_id": "sonic-2",
                 "transcript": req.text,
-                "voice": {"mode": "id", "id": voice_id},
+                "voice": {
+                    "mode": "id",
+                    "id": voice_id,
+                    "__experimental_controls": {"speed": "fast"},
+                },
                 "output_format": {
                     "container": "mp3",
                     "encoding": "mp3",
@@ -142,6 +150,7 @@ async def tts(req: TTSRequest):
 
     return Response(content=resp.content, media_type="audio/mpeg")
 
+
 @app.get("/api/chat/{conversation_id}/history")
 async def chat_history(conversation_id: str):
     conv = get_conversation(conversation_id)
@@ -149,13 +158,16 @@ async def chat_history(conversation_id: str):
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"conversation": conv, "messages": get_messages(conversation_id)}
 
+
 @app.get("/api/conversations")
 async def conversations(limit: int = 50):
     return list_conversations(limit)
 
+
 @app.get("/api/leads")
 async def recent_leads(limit: int = 50):
     return list_leads(limit)
+
 
 @app.get("/api/stats")
 async def stats():
@@ -166,6 +178,7 @@ async def stats():
         "calls_today": sum(1 for c in convs if c["started_at"].startswith(today)),
         "consultations_booked": sum(1 for l in leads if l["created_at"].startswith(today)),
     }
+
 
 @app.get("/api/dev/stats")
 async def dev_stats():
@@ -213,21 +226,12 @@ async def dev_stats():
 
     agents_info = [
         {
-            "id": "hvac",
-            "name": "Dante",
-            "role": "HVAC receptionist",
-            "voice": "Jasper — Australian male",
-            "model": "gpt-4o-mini",
-            "tts_model": "sonic-2",
-            "tools": ["extract_lead_data", "end_call"],
-        },
-        {
             "id": "law_firm",
             "name": "Claire",
             "role": "Law firm receptionist",
             "voice": "Charlotte — elegant young female",
             "model": "gpt-4o-mini",
-            "tts_model": "sonic-2",
+            "tts_model": "sonic-2 (fast)",
             "tools": ["schedule_consultation", "end_call"],
         },
     ]
@@ -235,7 +239,6 @@ async def dev_stats():
     convs = list_conversations(1000)
     leads = list_leads(1000)
 
-    # Per-call projections assuming AVG_CALL_MIN minutes
     volumes = [
         {"calls": 300,  "label": "300 calls/mo"},
         {"calls": 500,  "label": "500 calls/mo"},
@@ -286,7 +289,9 @@ async def dev_stats():
         },
     }
 
+
 app.mount("/static", StaticFiles(directory=FRONTEND / "static"), name="static")
+
 
 @app.get("/")
 async def root():
