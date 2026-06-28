@@ -1,4 +1,4 @@
-﻿﻿let conversationId = null;
+﻿﻿﻿let conversationId = null;
 let ttsEnabled = false;
 const currentAgent = "law_firm";
 
@@ -359,22 +359,39 @@ async function sendMessage() {
   }
 }
 
+function _ttsDebug(msg) {
+  const el = document.getElementById("tts-debug");
+  if (el) el.textContent = msg;
+}
+
 async function playTTS(text) {
   try {
+    _ttsDebug("fetching…");
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({text, agent: currentAgent}),
     });
-    if (!res.ok) { console.error("TTS API error:", res.status); return; }
+    if (!res.ok) { _ttsDebug("HTTP " + res.status); return; }
 
+    _ttsDebug("decoding…");
     const arrayBuf = await res.arrayBuffer();
-    const ctx = audioCtx(); // already running — no autoplay block
+    _ttsDebug("buf=" + arrayBuf.byteLength + "B");
 
-    // Use callback form for Safari/Firefox compat
+    const ctx = audioCtx();
+    if (ctx.state !== "running") {
+      _ttsDebug("ctx=" + ctx.state + " resuming…");
+      await ctx.resume();
+    }
+
     const audioBuf = await new Promise((resolve, reject) =>
-      ctx.decodeAudioData(arrayBuf, resolve, reject)
+      ctx.decodeAudioData(arrayBuf, resolve, (e) => {
+        _ttsDebug("decode fail: " + e);
+        reject(e);
+      })
     );
+
+    _ttsDebug("playing " + audioBuf.duration.toFixed(1) + "s");
 
     const src = ctx.createBufferSource();
     src.buffer = audioBuf;
@@ -395,6 +412,7 @@ async function playTTS(text) {
 
     src.onended = () => {
       gain.disconnect();
+      _ttsDebug("done");
       _setAmbienceLevel(AMBIENCE_BG, 0.6);
       _stopKeyboardAmbience();
     };
@@ -403,7 +421,10 @@ async function playTTS(text) {
     _startKeyboardAmbience();
     src.start(now);
 
-  } catch (e) { console.error("TTS error:", e); }
+  } catch (e) {
+    _ttsDebug("err: " + (e.message || e));
+    console.error("TTS error:", e);
+  }
 }
 
 function toggleTTS() {
@@ -453,5 +474,6 @@ function appendMessage(role, content) {
 
 loadOverview();
 setInterval(loadOverview, 30000);
+
 
 
