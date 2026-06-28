@@ -1,6 +1,9 @@
-﻿﻿﻿﻿let conversationId = null;
+﻿﻿﻿﻿﻿let conversationId = null;
 let ttsEnabled = false;
 const currentAgent = "law_firm";
+let _recognition = null;
+let _micActive = false;
+let _currentSrc = null; // currently playing TTS source node
 
 // ── Web Audio ─────────────────────────────────────────────────────────────────
 let _audioCtx = null;
@@ -145,6 +148,71 @@ function _startKeyboardAmbience() {
 function _stopKeyboardAmbience() {
   clearTimeout(_keyboardTimer);
   _keyboardTimer = null;
+}
+
+// ── Voice input (SpeechRecognition) ──────────────────────────────────────────
+function toggleMic() {
+  _micActive ? _stopMic() : _startMic();
+}
+
+function _startMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    appendMessage("system", "Speech recognition not supported — try Chrome or Edge.");
+    return;
+  }
+
+  // Stop any playing TTS so the mic doesn't pick it up
+  if (_currentSrc) { try { _currentSrc.stop(); } catch(_) {} _currentSrc = null; }
+
+  _recognition = new SR();
+  _recognition.lang = "en-US";
+  _recognition.interimResults = true;
+  _recognition.continuous = false;
+
+  const btn = document.getElementById("mic-btn");
+  const input = document.getElementById("chat-input");
+
+  _recognition.onstart = () => {
+    _micActive = true;
+    btn.textContent = "⏹";
+    btn.classList.add("bg-red-600", "border-red-600", "text-white");
+    btn.classList.remove("text-slate-300");
+    input.placeholder = "Listening…";
+    input.value = "";
+    _setAmbienceLevel(AMBIENCE_BG, 0.15); // drop ambience while listening
+  };
+
+  _recognition.onresult = (e) => {
+    const transcript = Array.from(e.results).map(r => r[0].transcript).join("");
+    input.value = transcript;
+    if (e.results[e.results.length - 1].isFinal) {
+      _stopMic();
+      if (transcript.trim()) sendMessage();
+    }
+  };
+
+  _recognition.onerror = (e) => {
+    if (e.error !== "no-speech") appendMessage("system", "Mic error: " + e.error);
+    _stopMic();
+  };
+
+  _recognition.onend = () => { _stopMic(); };
+
+  _recognition.start();
+}
+
+function _stopMic() {
+  if (_recognition) { try { _recognition.stop(); } catch(_) {} _recognition = null; }
+  _micActive = false;
+  const btn = document.getElementById("mic-btn");
+  if (btn) {
+    btn.textContent = "🎤";
+    btn.classList.remove("bg-red-600", "border-red-600", "text-white");
+    btn.classList.add("text-slate-300");
+  }
+  const input = document.getElementById("chat-input");
+  if (input) input.placeholder = "Type or tap 🎤 to speak…";
 }
 
 // ── Tab routing ───────────────────────────────────────────────────────────────
@@ -330,6 +398,7 @@ async function startChat() {
 
   document.getElementById("chat-input").disabled = false;
   document.getElementById("send-btn").disabled = false;
+  document.getElementById("mic-btn").disabled = false;
   document.getElementById("chat-input").focus();
   document.getElementById("reset-btn").classList.remove("hidden");
   document.getElementById("start-btn").classList.add("hidden");
@@ -410,7 +479,9 @@ async function playTTS(text) {
     src.connect(gain);
     gain.connect(ctx.destination);
 
+    _currentSrc = src;
     src.onended = () => {
+      _currentSrc = null;
       gain.disconnect();
       _ttsDebug("done");
       _setAmbienceLevel(AMBIENCE_BG, 0.6);
@@ -442,12 +513,15 @@ function toggleTTS() {
 }
 
 function resetChat() {
+  _stopMic();
   conversationId = null;
   _stopAmbience();
+  if (_currentSrc) { try { _currentSrc.stop(); } catch(_) {} _currentSrc = null; }
   document.getElementById("chat-messages").innerHTML =
     '<p class="text-slate-500 text-sm text-center">Press Start to connect to Claire</p>';
   document.getElementById("chat-input").disabled = true;
   document.getElementById("send-btn").disabled = true;
+  document.getElementById("mic-btn").disabled = true;
   document.getElementById("reset-btn").classList.add("hidden");
   document.getElementById("start-btn").classList.remove("hidden");
 }
@@ -474,6 +548,7 @@ function appendMessage(role, content) {
 
 loadOverview();
 setInterval(loadOverview, 30000);
+
 
 
 
