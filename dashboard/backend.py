@@ -129,11 +129,11 @@ async def tts(req: TTSRequest):
             },
             json={
                 "model_id": "sonic-2",
-                "transcript": req.text + "  ",
+                "transcript": req.text + "    ",
                 "voice": {
                     "mode": "id",
                     "id": voice_id,
-                    "__experimental_controls": {"speed": "normal"},
+                    "__experimental_controls": {"speed": "fast"},
                 },
                 "output_format": {
                     "container": "mp3",
