@@ -31,7 +31,7 @@ AGENTS = {
     "law_firm": {
         "prompt": LAW_PROMPT,
         "begin": LAW_BEGIN,
-        "voice_id": "71a7ad14-091c-4e8e-a314-022ece01c121",
+        "voice_id": "bf0a246a-8642-498a-9bc5-80c35e9276b5",
     },
 }
 
@@ -133,7 +133,7 @@ async def tts(req: TTSRequest):
                 "voice": {
                     "mode": "id",
                     "id": voice_id,
-                    "__experimental_controls": {"speed": "fast"},
+                    "__experimental_controls": {"speed": "normal"},
                 },
                 "output_format": {
                     "container": "mp3",
