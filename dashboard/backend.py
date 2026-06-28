@@ -31,7 +31,7 @@ AGENTS = {
     "law_firm": {
         "prompt": LAW_PROMPT,
         "begin": LAW_BEGIN,
-        "voice_id": "bf0a246a-8642-498a-9bc5-80c35e9276b5",
+        "voice_id": "643f5eee-459d-4b41-b4fc-0b8407139be6",
     },
 }
 
