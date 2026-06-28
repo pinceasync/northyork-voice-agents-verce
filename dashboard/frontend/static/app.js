@@ -1,4 +1,4 @@
-let conversationId = null;
+﻿let conversationId = null;
 let ttsEnabled = false;
 const currentAgent = "law_firm";
 
@@ -10,8 +10,8 @@ let _ambienceGain = null;
 let _humOsc = null;
 let _keyboardTimer = null;
 
-const AMBIENCE_BG   = 0.055;  // subtle always-on level while chatting
-const AMBIENCE_TALK = 0.32;   // level when agent is speaking
+const AMBIENCE_BG   = 0.015;  // subtle always-on level while chatting
+const AMBIENCE_TALK = 0.10;   // level when agent is speaking
 
 function audioCtx() {
   if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -34,7 +34,7 @@ function _buildNoiseBuffer(ctx) {
     b3 = 0.86650*b3 + w*0.3104856;
     b4 = 0.55000*b4 + w*0.5329522;
     b5 = -0.7616*b5 - w*0.0168980;
-    d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w*0.5362) * 0.09;
+    d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w*0.5362) * 0.035;
     b6 = w * 0.115926;
   }
   return buf;
@@ -55,14 +55,14 @@ function _startAmbience() {
   // Low-pass to remove harsh highs
   const lpf = ctx.createBiquadFilter();
   lpf.type = "lowpass";
-  lpf.frequency.value = 850;
+  lpf.frequency.value = 350;
 
   // Subtle AC hum at 60 Hz
   _humOsc = ctx.createOscillator();
   _humOsc.type = "sine";
   _humOsc.frequency.value = 60;
   const humGain = ctx.createGain();
-  humGain.gain.value = 0.003;
+  humGain.gain.value = 0.001;
   _humOsc.connect(humGain);
 
   // Master gain — starts silent, ramps to BG level
@@ -368,33 +368,26 @@ async function playTTS(text) {
     });
     if (!res.ok) return;
 
-    const arrayBuf = await res.arrayBuffer();
-    const ctx = audioCtx();
-    const audioBuf = await ctx.decodeAudioData(arrayBuf);
-
-    const src = ctx.createBufferSource();
-    src.buffer = audioBuf;
-
-    const fadeGain = ctx.createGain();
-    const now = ctx.currentTime;
-    const duration = audioBuf.duration;
-    const fadeStart = Math.max(0, duration - 0.38);
-    fadeGain.gain.setValueAtTime(1, now);
-    fadeGain.gain.setValueAtTime(1, now + fadeStart);
-    fadeGain.gain.linearRampToValueAtTime(0, now + duration);
-
-    src.connect(fadeGain);
-    fadeGain.connect(ctx.destination);
-
-    src.onended = () => {
-      _setAmbienceLevel(AMBIENCE_BG, 0.55);
-      _stopKeyboardAmbience();
-    };
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
 
     _setAmbienceLevel(AMBIENCE_TALK, 0.2);
     _startKeyboardAmbience();
-    src.start(now);
 
+    audio.addEventListener("timeupdate", () => {
+      if (!audio.duration) return;
+      const remaining = audio.duration - audio.currentTime;
+      if (remaining < 0.45) audio.volume = Math.max(0, remaining / 0.45);
+    });
+
+    audio.addEventListener("ended", () => {
+      URL.revokeObjectURL(url);
+      _setAmbienceLevel(AMBIENCE_BG, 0.6);
+      _stopKeyboardAmbience();
+    });
+
+    await audio.play();
   } catch (e) { console.error("TTS error:", e); }
 }
 
@@ -445,3 +438,4 @@ function appendMessage(role, content) {
 
 loadOverview();
 setInterval(loadOverview, 30000);
+
