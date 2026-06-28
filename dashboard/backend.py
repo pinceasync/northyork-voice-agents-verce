@@ -1,9 +1,10 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from pathlib import Path
+import io
 import os
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -151,6 +152,16 @@ async def tts(req: TTSRequest):
     return Response(content=resp.content, media_type="audio/mpeg")
 
 
+@app.post("/api/stt")
+async def stt(audio: UploadFile = File(...)):
+    data = await audio.read()
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    buf = io.BytesIO(data)
+    buf.name = audio.filename or "audio.webm"
+    result = client.audio.transcriptions.create(model="whisper-1", file=buf)
+    return {"text": result.text}
+
+
 @app.get("/api/chat/{conversation_id}/history")
 async def chat_history(conversation_id: str):
     conv = get_conversation(conversation_id)
@@ -296,3 +307,4 @@ app.mount("/static", StaticFiles(directory=FRONTEND / "static"), name="static")
 @app.get("/")
 async def root():
     return FileResponse(FRONTEND / "index.html")
+
