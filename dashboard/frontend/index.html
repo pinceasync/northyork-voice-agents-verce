@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -120,9 +120,13 @@
       </div>
 
       <div class="flex gap-2">
-        <input id="chat-input" type="text" placeholder="Type your message..." disabled
+        <input id="chat-input" type="text" placeholder="Type or tap 🎤 to speak…" disabled
           class="flex-1 bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           onkeydown="if(event.key==='Enter') sendMessage()" />
+        <button onclick="toggleMic()" id="mic-btn" disabled title="Hold to speak"
+          class="bg-card border border-border hover:border-slate-500 disabled:opacity-40 text-slate-300 px-3 py-2.5 rounded-lg text-sm transition-colors">
+          🎤
+        </button>
         <button onclick="sendMessage()" id="send-btn" disabled
           class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-lg text-sm font-medium">
           Send
@@ -249,4 +253,5 @@
   <script src="/static/app.js"></script>
 </body>
 </html>
+
 
