@@ -1,4 +1,4 @@
-﻿let conversationId = null;
+﻿﻿let conversationId = null;
 let ttsEnabled = false;
 const currentAgent = "law_firm";
 
@@ -366,28 +366,43 @@ async function playTTS(text) {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({text, agent: currentAgent}),
     });
-    if (!res.ok) return;
+    if (!res.ok) { console.error("TTS API error:", res.status); return; }
 
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+    const arrayBuf = await res.arrayBuffer();
+    const ctx = audioCtx(); // already running — no autoplay block
+
+    // Use callback form for Safari/Firefox compat
+    const audioBuf = await new Promise((resolve, reject) =>
+      ctx.decodeAudioData(arrayBuf, resolve, reject)
+    );
+
+    const src = ctx.createBufferSource();
+    src.buffer = audioBuf;
+
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+    const dur = audioBuf.duration;
+    const fadeAt = Math.max(0, dur - 0.45);
+
+    gain.gain.setValueAtTime(1, now);
+    if (fadeAt > 0) {
+      gain.gain.setValueAtTime(1, now + fadeAt);
+      gain.gain.linearRampToValueAtTime(0.001, now + dur);
+    }
+
+    src.connect(gain);
+    gain.connect(ctx.destination);
+
+    src.onended = () => {
+      gain.disconnect();
+      _setAmbienceLevel(AMBIENCE_BG, 0.6);
+      _stopKeyboardAmbience();
+    };
 
     _setAmbienceLevel(AMBIENCE_TALK, 0.2);
     _startKeyboardAmbience();
+    src.start(now);
 
-    audio.addEventListener("timeupdate", () => {
-      if (!audio.duration) return;
-      const remaining = audio.duration - audio.currentTime;
-      if (remaining < 0.45) audio.volume = Math.max(0, remaining / 0.45);
-    });
-
-    audio.addEventListener("ended", () => {
-      URL.revokeObjectURL(url);
-      _setAmbienceLevel(AMBIENCE_BG, 0.6);
-      _stopKeyboardAmbience();
-    });
-
-    await audio.play();
   } catch (e) { console.error("TTS error:", e); }
 }
 
@@ -438,4 +453,5 @@ function appendMessage(role, content) {
 
 loadOverview();
 setInterval(loadOverview, 30000);
+
 
