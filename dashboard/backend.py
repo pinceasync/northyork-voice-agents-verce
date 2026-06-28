@@ -2,9 +2,10 @@
 from pathlib import Path
 import io
 import os
+from urllib.parse import quote
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -160,6 +161,111 @@ async def stt(audio: UploadFile = File(...)):
     buf.name = audio.filename or "audio.webm"
     result = client.audio.transcriptions.create(model="whisper-1", file=buf)
     return {"text": result.text}
+
+
+def _base_url(request: Request) -> str:
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    proto = request.headers.get("x-forwarded-proto", "https")
+    return f"{proto}://{host}"
+
+def _tts_play_url(base: str, text: str) -> str:
+    return f"{base}/api/tts/audio?agent=law_firm&text={quote(text, safe='')}"
+
+
+@app.get("/api/tts/audio")
+async def tts_audio(text: str, agent: str = "law_firm"):
+    """GET endpoint so Twilio <Play> can stream Cartesia TTS directly."""
+    if agent not in AGENTS:
+        raise HTTPException(status_code=400, detail=f"Unknown agent: {agent}")
+    voice_id = AGENTS[agent]["voice_id"]
+    api_key = os.environ["CARTESIA_API_KEY"]
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.cartesia.ai/tts/bytes",
+            headers={"X-API-Key": api_key, "Cartesia-Version": "2024-06-10", "Content-Type": "application/json"},
+            json={
+                "model_id": "sonic-2",
+                "transcript": text + "    ",
+                "voice": {"mode": "id", "id": voice_id, "__experimental_controls": {"speed": "fast"}},
+                "output_format": {"container": "mp3", "encoding": "mp3", "sample_rate": 44100},
+            },
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Cartesia error: {resp.text[:200]}")
+    return Response(content=resp.content, media_type="audio/mpeg")
+
+
+@app.post("/api/twilio/incoming")
+async def twilio_incoming(request: Request):
+    base = _base_url(request)
+    conv_id = create_conversation("law_firm")
+    greeting = AGENTS["law_firm"]["begin"]
+    add_message(conv_id, "assistant", greeting)
+    action = f"{base}/api/twilio/gather?conv_id={conv_id}"
+    tts = _tts_play_url(base, greeting)
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Gather input="speech" action="{action}" method="POST" speechTimeout="auto" speechModel="phone_call">
+    <Play>{tts}</Play>
+  </Gather>
+  <Redirect method="POST">{base}/api/twilio/incoming</Redirect>
+</Response>"""
+    return Response(content=twiml, media_type="application/xml")
+
+
+@app.post("/api/twilio/gather")
+async def twilio_gather(request: Request, conv_id: str):
+    base = _base_url(request)
+    form = await request.form()
+    speech = (form.get("SpeechResult") or "").strip()
+    action = f"{base}/api/twilio/gather?conv_id={conv_id}"
+
+    if not speech:
+        tts = _tts_play_url(base, "I'm sorry, I didn't quite catch that. Could you repeat?")
+        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Gather input="speech" action="{action}" method="POST" speechTimeout="auto" speechModel="phone_call">
+    <Play>{tts}</Play>
+  </Gather>
+  <Redirect method="POST">{base}/api/twilio/incoming</Redirect>
+</Response>"""
+        return Response(content=twiml, media_type="application/xml")
+
+    add_message(conv_id, "user", speech)
+    history = get_messages(conv_id)
+
+    oai = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    messages = [{"role": "system", "content": AGENTS["law_firm"]["prompt"]}]
+    for m in history:
+        messages.append({"role": m["role"], "content": m["content"]})
+    completion = oai.chat.completions.create(model="gpt-4o-mini", messages=messages, temperature=0.4)
+    reply = completion.choices[0].message.content
+
+    tin, tout = completion.usage.prompt_tokens, completion.usage.completion_tokens
+    log_usage("openai", tin + tout, tin * 0.00000015 + tout * 0.0000006,
+              {"tokens_in": tin, "tokens_out": tout, "conversation_id": conv_id})
+    add_message(conv_id, "assistant", reply)
+
+    ended = "have a good one" in reply.lower() or "let you go" in reply.lower()
+    if ended:
+        end_conversation(conv_id)
+
+    tts = _tts_play_url(base, reply)
+    if ended:
+        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Play>{tts}</Play>
+  <Hangup/>
+</Response>"""
+    else:
+        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Gather input="speech" action="{action}" method="POST" speechTimeout="auto" speechModel="phone_call">
+    <Play>{tts}</Play>
+  </Gather>
+  <Redirect method="POST">{base}/api/twilio/incoming</Redirect>
+</Response>"""
+    return Response(content=twiml, media_type="application/xml")
 
 
 @app.get("/api/chat/{conversation_id}/history")
