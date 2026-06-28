@@ -367,19 +367,34 @@ async function playTTS(text) {
       body: JSON.stringify({text, agent: currentAgent}),
     });
     if (!res.ok) return;
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audio.onplay = () => {
-      _setAmbienceLevel(AMBIENCE_TALK, 0.2);
-      _startKeyboardAmbience();
-    };
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      _setAmbienceLevel(AMBIENCE_BG, 0.4);
+
+    const arrayBuf = await res.arrayBuffer();
+    const ctx = audioCtx();
+    const audioBuf = await ctx.decodeAudioData(arrayBuf);
+
+    const src = ctx.createBufferSource();
+    src.buffer = audioBuf;
+
+    const fadeGain = ctx.createGain();
+    const now = ctx.currentTime;
+    const duration = audioBuf.duration;
+    const fadeStart = Math.max(0, duration - 0.38);
+    fadeGain.gain.setValueAtTime(1, now);
+    fadeGain.gain.setValueAtTime(1, now + fadeStart);
+    fadeGain.gain.linearRampToValueAtTime(0, now + duration);
+
+    src.connect(fadeGain);
+    fadeGain.connect(ctx.destination);
+
+    src.onended = () => {
+      _setAmbienceLevel(AMBIENCE_BG, 0.55);
       _stopKeyboardAmbience();
     };
-    audio.play();
+
+    _setAmbienceLevel(AMBIENCE_TALK, 0.2);
+    _startKeyboardAmbience();
+    src.start(now);
+
   } catch (e) { console.error("TTS error:", e); }
 }
 
