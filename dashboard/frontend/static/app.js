@@ -1,4 +1,4 @@
-﻿﻿﻿let conversationId = null;
+﻿﻿﻿﻿let conversationId = null;
 let ttsEnabled = false;
 const currentAgent = "law_firm";
 
@@ -364,6 +364,11 @@ function _ttsDebug(msg) {
   if (el) el.textContent = msg;
 }
 
+// Only type when the agent is noting down caller information
+function _isNoteworthy(text) {
+  return /(got it|got that|noted|i.ll note|make a note|let me (write|note|jot|record)|i.ve (got|recorded|noted) (your|that)|i have your|i.ll (write|jot|make a note|record)|i.ve (scheduled|booked|made a note)|perfect,?\s+(i.ll|let me)|thank you (for (that|your|the)|,?\s+[A-Z])|\b\d{3}[\s.\-]?\d{3}[\s.\-]?\d{4}\b)/i.test(text);
+}
+
 async function playTTS(text) {
   try {
     _ttsDebug("fetching…");
@@ -374,15 +379,10 @@ async function playTTS(text) {
     });
     if (!res.ok) { _ttsDebug("HTTP " + res.status); return; }
 
-    _ttsDebug("decoding…");
     const arrayBuf = await res.arrayBuffer();
-    _ttsDebug("buf=" + arrayBuf.byteLength + "B");
 
     const ctx = audioCtx();
-    if (ctx.state !== "running") {
-      _ttsDebug("ctx=" + ctx.state + " resuming…");
-      await ctx.resume();
-    }
+    if (ctx.state !== "running") await ctx.resume();
 
     const audioBuf = await new Promise((resolve, reject) =>
       ctx.decodeAudioData(arrayBuf, resolve, (e) => {
@@ -399,12 +399,12 @@ async function playTTS(text) {
     const gain = ctx.createGain();
     const now = ctx.currentTime;
     const dur = audioBuf.duration;
-    const fadeAt = Math.max(0, dur - 0.7);
+    const fadeAt = Math.max(0, dur - 0.25);
 
     gain.gain.setValueAtTime(1, now);
     if (fadeAt > 0) {
       gain.gain.setValueAtTime(1, now + fadeAt);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur + 0.1);
+      gain.gain.linearRampToValueAtTime(0.001, now + dur + 0.05);
     }
 
     src.connect(gain);
@@ -418,7 +418,7 @@ async function playTTS(text) {
     };
 
     _setAmbienceLevel(AMBIENCE_TALK, 0.2);
-    _startKeyboardAmbience();
+    if (_isNoteworthy(text)) _startKeyboardAmbience();
     src.start(now);
 
   } catch (e) {
@@ -474,6 +474,7 @@ function appendMessage(role, content) {
 
 loadOverview();
 setInterval(loadOverview, 30000);
+
 
 
 
